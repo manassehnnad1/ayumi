@@ -1,0 +1,274 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { ethers } from 'ethers';
+import { useFHE } from '../context/FHEContext';
+
+type Steps = 'claim' | 'deposit';
+
+// Contract configuration
+const MOCK_TOKEN_ADDRESS = '0x7D5BA7DeB9A5d2F36FE38782129F6401A66e1096';
+const PORTFOLIO_MANAGER_ADDRESS = '0xc5e5A9e484DD7B69E0235c94C4dE67388f20859c';
+
+const MOCK_TOKEN_ABI = [
+  "function claimTokens(uint256 amount) external",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function approve(address spender, uint256 amount) external returns (bool)",
+];
+
+const PORTFOLIO_MANAGER_ABI = [
+  "function deposit(bytes32 inputHandle, bytes inputProof) external",
+];
+
+export default function AgentDashboard() {
+  const navigate = useNavigate();
+  const { ready, authenticated, user, logout } = usePrivy();
+  const { wallets } = useWallets();
+  const { fheInstance, isInitialized } = useFHE();
+
+  const [currentStep, setCurrentStep] = useState<Steps>('deposit');
+  const [amount, setAmount] = useState('1000');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleLogout = async() => {
+    await logout();
+    navigate('/');
+  };
+
+  
+const handleClaimTokens = async () => {
+    setIsProcessing(true);
+    try {
+      const wallet = wallets[0];
+      if (!wallet) {
+        alert('No wallet connected');
+        return;
+      }
+
+      await wallet.switchChain(11155111);
+      const ethereumProvider = await wallet.getEthereumProvider();
+      const provider = new ethers.BrowserProvider(ethereumProvider);
+      const signer = await provider.getSigner();
+
+      const mockToken = new ethers.Contract(
+        MOCK_TOKEN_ADDRESS,
+        MOCK_TOKEN_ABI,
+        signer
+      );
+
+      const amountInWei = ethers.parseUnits(amount, 18);
+
+      console.log(`Claiming ${amount} tokens...`);
+      
+      const tx = await mockToken.claimTokens(amountInWei);
+      console.log('Transaction sent:', tx.hash);
+
+      await tx.wait();
+      console.log('Transaction confirmed!');
+      
+      alert(`✅ Successfully claimed ${amount} ayUSDC tokens!\n\nTransaction: ${tx.hash.slice(0, 10)}...`);
+      
+      setAmount('100');
+      setCurrentStep('deposit');
+    } catch (error: any) {
+      console.error('Error claiming tokens:', error);
+      
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        alert('❌ Transaction cancelled');
+      } else if (error.message?.includes('Claim cooldown')) {
+        alert('⏰ Please wait 1 hour between claims');
+      } else if (error.message?.includes('insufficient funds')) {
+        alert('❌ Insufficient Sepolia ETH for gas. Get some from a faucet!');
+      } else {
+        alert(`❌ Failed to claim tokens:\n${error.message || 'Unknown error'}`);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+
+  const handleDeposit = async () => {
+    setIsProcessing(true);
+    try {
+      // Check FHE is ready
+      if (!isInitialized || !fheInstance) {
+        alert('⏳ Encryption system initializing... Please wait a moment and try again.');
+        return;
+      }
+
+      const wallet = wallets[0];
+      if (!wallet) {
+        alert('No wallet connected');
+        return;
+      }
+
+      await wallet.switchChain(11155111);
+      const ethereumProvider = await wallet.getEthereumProvider();
+      const provider = new ethers.BrowserProvider(ethereumProvider);
+      const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
+
+      console.log(`Depositing ${amount} tokens...`);
+
+      // Step 1: Approve PortfolioManager to spend tokens
+      const mockToken = new ethers.Contract(
+        MOCK_TOKEN_ADDRESS,
+        MOCK_TOKEN_ABI,
+        signer
+      );
+
+      const amountInWei = ethers.parseUnits(amount, 18);
+      
+      console.log('Step 1: Approving tokens...');
+      const approveTx = await mockToken.approve(PORTFOLIO_MANAGER_ADDRESS, amountInWei);
+      await approveTx.wait();
+      console.log('Approval confirmed!');
+
+      // Step 2: Encrypt the amount
+      console.log('Step 2: Encrypting amount...');
+      const encryptedInput = fheInstance.createEncryptedInput(
+        PORTFOLIO_MANAGER_ADDRESS,
+        userAddress
+      );
+      
+      encryptedInput.add32(Number(amount));
+      const encrypted = await encryptedInput.encrypt();
+      
+      console.log('Encrypted data:', {
+        handle: encrypted.handles[0],
+        proof: encrypted.inputProof.slice(0, 20) + '...'
+      });
+
+      // Step 3: Call deposit with encrypted data
+      console.log('Step 3: Sending deposit transaction...');
+      const portfolioManager = new ethers.Contract(
+        PORTFOLIO_MANAGER_ADDRESS,
+        PORTFOLIO_MANAGER_ABI,
+        signer
+      );
+
+      const depositTx = await portfolioManager.deposit(
+        encrypted.handles[0],
+        encrypted.inputProof
+      );
+      
+      console.log('Deposit transaction sent:', depositTx.hash);
+      await depositTx.wait();
+      console.log('Deposit confirmed!');
+
+      alert(
+        `✅ Deposit successful!\n\n` +
+        `Amount: ${amount} tokens\n` +
+        `Encrypted: ${encrypted.handles[0].slice(0, 20)}...\n\n` +
+        `Your balance is now encrypted on-chain!`
+      );
+      
+      // TODO: Move to chat interface showing agent managing portfolio
+    } catch (error: any) {
+      console.error('Error depositing tokens:', error);
+      
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        alert('❌ Transaction cancelled');
+      } else {
+        alert(`❌ Failed to deposit:\n${error.message || 'Unknown error'}`);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+const handleSubmit = () => {
+    if (currentStep === 'claim') {
+      handleClaimTokens();
+    } else {
+      handleDeposit();
+    }
+  };
+
+ if (ready && !authenticated) {
+    navigate('/');
+    return null;
+  }
+
+  const walletAddress = user?.wallet?.address;
+
+  const stepConfig = {
+    claim: {
+      title: 'Claim test tokens',
+      buttonText: 'Claim',
+      helperText: 'Get free ayUSDC tokens to try out Ayumi. No real money needed!',
+    },
+    deposit: {
+      title: 'Deposit',
+      buttonText: 'Deposit',
+      helperText: 'Deposit tokens to start portfolio management with encrypted balances.',
+    },
+  };
+
+  const config = stepConfig[currentStep];
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Header with Logout */}
+      <header className="flex justify-between items-center p-6 border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <img src="/ayum.svg" alt="" className="h-5 w-5"/>
+          <h1 className="text-xl font-semibold text-gray-900">ayumi.</h1>
+        </div>
+        
+        <div className="flex items-center gap-4">
+           {walletAddress && (
+            <span className="text-sm text-gray-600">
+              {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+            </span>
+          )}
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+         <div className="max-w-2xl mx-auto p-8 mt-12">
+        {/* Dynamic Section - Claim or Deposit */}
+        <div className="space-y-6">
+          <h2 className="text-4xl font-semibold text-gray-900">
+            {config.title}
+          </h2>
+
+          <div className="space-y-4">
+            {/* Input with bottom border */}
+            <div className="relative">
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="Enter amount"
+                className="w-full text-xl py-3 px-0 bg-transparent border-0 border-b-2 border-gray-900 focus:outline-none focus:border-black placeholder:text-gray-400"
+                disabled={isProcessing}
+              />
+            </div>
+
+            {/* Action Button - Yellow */}
+            <button
+              onClick={handleSubmit}
+              disabled={isProcessing || !amount || Number(amount) <= 0}
+              className="bg-yellow-400 hover:bg-yellow-500 disabled:bg-yellow-200 text-black font-medium text-xl px-8 py-3 rounded-lg transition-colors disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isProcessing ? 'Processing...' : config.buttonText}
+            </button>
+
+            {/* Helper text */}
+            <p className="text-lg text-gray-500">
+              {config.helperText}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

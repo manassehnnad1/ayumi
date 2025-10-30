@@ -1,0 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@300..900&family=Funnel+Display:wght@300..800&family=Orbit&display=swap');
+@import "tailwindcss";
+
+
+
+@theme{
+    --font-sans: 'Darker Grotesque', sans-serif;
+    --font-display: 'Funnel Display', sans-serif;
+    --font-orbit: 'Orbit', sans-serif;
+}
+
+::-webkit-scrollbar{
+    display: none;
+}
