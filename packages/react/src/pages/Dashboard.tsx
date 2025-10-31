@@ -193,6 +193,7 @@ const handleRevealBalance = async (): Promise<string> => {
     const ethereumProvider = await wallet.getEthereumProvider();
     const provider = new ethers.BrowserProvider(ethereumProvider);
     const signer = await provider.getSigner();
+    const userAddress = await signer.getAddress();
 
     // Get encrypted balance from contract
     const portfolioManager = new ethers.Contract(
@@ -205,20 +206,39 @@ const handleRevealBalance = async (): Promise<string> => {
     const encryptedBalance = await portfolioManager.getTotalBalance();
     console.log('Encrypted balance handle:', encryptedBalance);
 
-    // Decrypt using relayer
-    console.log('Decrypting via relayer...');
-    const decryptedValues = await fheInstance.decrypt(
-      PORTFOLIO_MANAGER_ADDRESS,
-      encryptedBalance
+    // Generate keypair for reencryption
+    const { publicKey, privateKey } = fheInstance.generateKeypair();
+
+    // Create EIP712 signature for the public key
+    const eip712 = fheInstance.createEIP712(publicKey, PORTFOLIO_MANAGER_ADDRESS);
+    
+    // Request user's signature on the public key
+    const signature = await signer.signTypedData(
+      eip712.domain,
+      { Reencrypt: eip712.types.Reencrypt },
+      eip712.message
     );
 
-    console.log('Decryption result:', decryptedValues);
+    // Handle case where balance is not initialized
+    if (encryptedBalance.toString() === "0") {
+      console.log('Balance is zero or not initialized');
+      return "0";
+    }
+
+    // Reencrypt and decrypt the balance
+    console.log('Reencrypting balance...');
+    const decryptedBalance = await fheInstance.reencrypt(
+      encryptedBalance,
+      privateKey,
+      publicKey,
+      signature.replace("0x", ""), // Remove 0x prefix
+      PORTFOLIO_MANAGER_ADDRESS,
+      userAddress
+    );
+
+    console.log('Balance revealed:', decryptedBalance);
     
-    // The result should be a number
-    const balanceValue = decryptedValues.toString();
-    console.log('Balance revealed:', balanceValue);
-    
-    return balanceValue;
+    return decryptedBalance.toString();
   } catch (error: any) {
     console.error('Decryption error:', error);
     throw new Error(`Failed to decrypt: ${error.message}`);
