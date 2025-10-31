@@ -209,8 +209,7 @@ const handleRevealBalance = async (): Promise<string> => {
 
     console.log('Getting encrypted balance from contract...');
     const encryptedBalanceHandle = await portfolioManager.getTotalBalance();
-    console.log('Encrypted balance handle:', encryptedBalanceHandle);
-    console.log('Handle toString:', encryptedBalanceHandle.toString());
+    console.log('Encrypted balance handle:', encryptedBalanceHandle.toString());
 
     // Handle case where balance is not initialized or is zero
     if (!encryptedBalanceHandle || encryptedBalanceHandle.toString() === "0") {
@@ -218,35 +217,36 @@ const handleRevealBalance = async (): Promise<string> => {
       return "0";
     }
 
-    // The relayer SDK likely has a method like getUserDecryption or similar
-    // Check what methods are available on your fheInstance
-    console.log('Available methods on fheInstance:', Object.keys(fheInstance));
-    
-    // Try the most likely method names:
-    let decryptedValue;
-    
-    if (typeof fheInstance.getUserDecryption === 'function') {
-      decryptedValue = await fheInstance.getUserDecryption(
-        encryptedBalanceHandle,
-        PORTFOLIO_MANAGER_ADDRESS,
-        userAddress,
-        signer
-      );
-    } else if (typeof fheInstance.requestUserDecryption === 'function') {
-      decryptedValue = await fheInstance.requestUserDecryption(
-        encryptedBalanceHandle,
-        PORTFOLIO_MANAGER_ADDRESS,
-        signer
-      );
-    } else if (typeof fheInstance.decrypt === 'function') {
-      // Some SDKs have a simple decrypt method
-      decryptedValue = await fheInstance.decrypt(
-        encryptedBalanceHandle,
-        signer
-      );
-    } else {
-      throw new Error('No decryption method found on fheInstance. Available methods: ' + Object.keys(fheInstance).join(', '));
-    }
+    // Generate keypair for user decryption
+    console.log('Generating keypair...');
+    const { publicKey, privateKey } = fheInstance.generateKeypair();
+
+    // Create EIP712 signature
+    console.log('Creating EIP712 signature...');
+    const eip712Data = fheInstance.createEIP712(
+      publicKey,
+      PORTFOLIO_MANAGER_ADDRESS
+    );
+
+    // Request user's signature
+    console.log('Requesting signature from user...');
+    const signature = await signer.signTypedData(
+      eip712Data.domain,
+      { Reencrypt: eip712Data.types.Reencrypt },
+      eip712Data.message
+    );
+
+    console.log('Signature obtained, calling userDecrypt...');
+
+    // Use userDecrypt method from relayer SDK
+    const decryptedValue = await fheInstance.userDecrypt(
+      encryptedBalanceHandle,
+      privateKey,
+      publicKey,
+      signature.replace('0x', ''),
+      PORTFOLIO_MANAGER_ADDRESS,
+      userAddress
+    );
 
     console.log('Balance revealed:', decryptedValue);
     
