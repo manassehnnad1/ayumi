@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { useFHE } from '../context/FHEContext';
-import { ArrowLeft } from 'lucide-react';
-import BalanceDashboard from '@/components/BalanceDashboard';
+// import { ArrowLeft } from 'lucide-react';
+// import BalanceDashboard from '@/components/BalanceDashboard';
 
 type Steps = 'claim' | 'deposit' | 'dashboard';
 

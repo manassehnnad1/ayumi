@@ -9,13 +9,13 @@ interface BalanceDashboardProps {
 export default function BalanceDashboard({ encryptedBalance, onRevealBalance }: BalanceDashboardProps) {
   const [showRevealPopup, setShowRevealPopup] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
-  const [revealedBalance, setRevealedBalance] = useState<string | null>(null);
+  const [revealedBalance] = useState<string | null>(null);
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
   const [agentStarted, setAgentStarted] = useState(false);
   
   // Mock PNL data - will be real once agent rebalances
-  const [pnlA, setPnlA] = useState(0);
-  const [pnlB, setPnlB] = useState(0);
+  const [pnlA] = useState(0);
+  const [pnlB] = useState(0);
 
   const handleRevealClick = () => {
     setShowRevealPopup(true);
