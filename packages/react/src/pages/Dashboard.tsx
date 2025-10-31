@@ -31,7 +31,7 @@ export default function AgentDashboard() {
   const [amount, setAmount] = useState('1000');
   const [isProcessing, setIsProcessing] = useState(false);
   const [encryptedBalanceHandle, setEncryptedBalanceHandle] = useState<string>('');
-  const [revealedBalance, setRevealedBalance] = useState<string | null>(null);
+  
 
   const handleLogout = async() => {
     await logout();
@@ -186,8 +186,8 @@ export default function AgentDashboard() {
     try {
       // TODO: Implement actual decryption using relayer
       // For now, just show the amount they deposited
-      setRevealedBalance(amount);
-      console.log('Balance revealed!');
+      
+      console.log('Balance revealed:', amount);
     } catch (error) {
       console.error('Decryption error:', error);
       throw error;
