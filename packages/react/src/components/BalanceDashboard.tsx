@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye } from 'lucide-react';
 
 
@@ -16,8 +16,25 @@ export default function BalanceDashboard({ encryptedBalance, onRevealBalance }: 
   const [agentStarted, setAgentStarted] = useState(false);
   
   // Mock PNL data - will be real once agent rebalances
-  const [pnlA] = useState(0);
-  const [pnlB] = useState(0);
+const [pnlA, setPnlA] = useState(0);
+const [pnlB, setPnlB] = useState(0);
+
+// periodically change pnl every 6 seconds
+useEffect(() => {
+  const interval = setInterval(() => {
+    // generate pseudo-random pnl shifts between -5% and +5%
+    setPnlA(prev => {
+      let next = +(prev + (Math.random() * 10 - 5)).toFixed(2);
+      return Math.max(-10, Math.min(10, next)); // clamp between -10% and +10%
+    });
+    setPnlB(prev => {
+      let next = +(prev + (Math.random() * 10 - 5)).toFixed(2);
+      return Math.max(-10, Math.min(10, next));
+    });
+  }, 6000); // every 6 seconds
+
+  return () => clearInterval(interval);
+}, []);
 
   const handleRevealClick = () => {
     setShowRevealPopup(true);
