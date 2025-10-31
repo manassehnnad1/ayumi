@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { useFHE } from '../context/FHEContext';
+import { ArrowLeft } from 'lucide-react';
+import BalanceDashboard from '@/components/BalanceDashboard';
 
-type Steps = 'claim' | 'deposit';
+type Steps = 'claim' | 'deposit' | 'dashboard';
 
 // Contract configuration
 const MOCK_TOKEN_ADDRESS = '0x7D5BA7DeB9A5d2F36FE38782129F6401A66e1096';
@@ -26,7 +28,7 @@ export default function AgentDashboard() {
   const { wallets } = useWallets();
   const { fheInstance, isInitialized } = useFHE();
 
-  const [currentStep, setCurrentStep] = useState<Steps>('deposit');
+  const [currentStep, setCurrentStep] = useState<Steps>('claim');
   const [amount, setAmount] = useState('1000');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -193,18 +195,23 @@ const handleSubmit = () => {
 
   const walletAddress = user?.wallet?.address;
 
-  const stepConfig = {
-    claim: {
-      title: 'Claim test tokens',
-      buttonText: 'Claim',
-      helperText: 'Get free ayUSDC tokens to try out Ayumi. No real money needed!',
-    },
-    deposit: {
-      title: 'Deposit',
-      buttonText: 'Deposit',
-      helperText: 'Deposit tokens to start portfolio management with encrypted balances.',
-    },
-  };
+ const stepConfig: Record<Steps, { title: string; buttonText: string; helperText: string }> = {
+  claim: {
+    title: 'Claim test tokens',
+    buttonText: 'Claim',
+    helperText: 'Get free ayUSDC tokens to try out Ayumi. No real money needed!',
+  },
+  deposit: {
+    title: 'Deposit',
+    buttonText: 'Deposit',
+    helperText: 'Deposit tokens to start portfolio management with encrypted balances.',
+  },
+  dashboard: {
+    title: 'Dashboard',
+    buttonText: '',
+    helperText: '',
+  },
+};
 
   const config = stepConfig[currentStep];
 
