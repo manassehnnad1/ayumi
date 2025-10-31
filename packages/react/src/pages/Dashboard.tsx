@@ -260,14 +260,38 @@ const handleSubmit = () => {
               />
             </div>
 
-            {/* Action Button - Yellow */}
-            <button
-              onClick={handleSubmit}
-              disabled={isProcessing || !amount || Number(amount) <= 0}
-              className="bg-yellow-400 hover:bg-yellow-500 disabled:bg-yellow-200 text-black font-medium text-xl px-8 py-3 rounded-lg transition-colors disabled:cursor-not-allowed cursor-pointer"
-            >
-              {isProcessing ? 'Processing...' : config.buttonText}
-            </button>
+            {/* Action Button - Yellow + Next/Back controls */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={handleSubmit}
+                disabled={isProcessing || !amount || Number(amount) <= 0}
+                className="bg-yellow-400 hover:bg-yellow-500 disabled:bg-yellow-200 text-black font-medium text-xl px-8 py-3 rounded-lg transition-colors disabled:cursor-not-allowed cursor-pointer"
+              >
+                {isProcessing ? 'Processing...' : config.buttonText}
+              </button>
+
+              {/* Next button shown on claim step */}
+              {currentStep === 'claim' && (
+                <button
+                  onClick={() => setCurrentStep('deposit')}
+                  disabled={isProcessing}
+                  className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-lg font-medium transition-colors disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              )}
+
+              {/* Back button shown on deposit step */}
+              {currentStep === 'deposit' && (
+                <button
+                  onClick={() => setCurrentStep('claim')}
+                  disabled={isProcessing}
+                  className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-lg font-medium transition-colors disabled:cursor-not-allowed"
+                >
+                  Back
+                </button>
+              )}
+            </div>
 
             {/* Helper text */}
             <p className="text-lg text-gray-500">
