@@ -3,13 +3,13 @@ import { Eye } from 'lucide-react';
 
 interface BalanceDashboardProps {
   encryptedBalance: string;
-  onRevealBalance: () => Promise<void>;
+  onRevealBalance: () => Promise<string>; // Returns the revealed amount
 }
 
 export default function BalanceDashboard({ encryptedBalance, onRevealBalance }: BalanceDashboardProps) {
   const [showRevealPopup, setShowRevealPopup] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
-  const [revealedBalance] = useState<string | null>(null);
+  const [revealedBalance, setRevealedBalance] = useState<string | null>(null);
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
   const [agentStarted, setAgentStarted] = useState(false);
   
@@ -25,8 +25,9 @@ export default function BalanceDashboard({ encryptedBalance, onRevealBalance }: 
     setIsRevealing(true);
     setShowRevealPopup(false);
     try {
-      await onRevealBalance();
-      // Balance will be set by parent component
+      const balance = await onRevealBalance(); // Get the revealed amount
+      setRevealedBalance(balance); // Set it in state
+      console.log('Balance set to:', balance);
     } catch (error) {
       console.error('Failed to reveal:', error);
       alert('Failed to decrypt balance');

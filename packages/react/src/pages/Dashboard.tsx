@@ -31,7 +31,7 @@ export default function AgentDashboard() {
   const [amount, setAmount] = useState('1000');
   const [isProcessing, setIsProcessing] = useState(false);
   const [encryptedBalanceHandle, setEncryptedBalanceHandle] = useState<string>('');
-  
+
 
   const handleLogout = async() => {
     await logout();
@@ -177,22 +177,21 @@ export default function AgentDashboard() {
     }
   };
 
-  const handleRevealBalance = async () => {
-    if (!fheInstance || !encryptedBalanceHandle) {
-      alert('Cannot decrypt - missing data');
-      return;
-    }
+ const handleRevealBalance = async (): Promise<string> => {
+  if (!fheInstance || !encryptedBalanceHandle) {
+    throw new Error('Cannot decrypt - missing data');
+  }
 
-    try {
-      // TODO: Implement actual decryption using relayer
-      // For now, just show the amount they deposited
-      
-      console.log('Balance revealed:', amount);
-    } catch (error) {
-      console.error('Decryption error:', error);
-      throw error;
-    }
-  };
+  try {
+    // TODO: Implement actual decryption using relayer
+    // For now, just return the amount they deposited
+    console.log('Balance revealed:', amount);
+    return amount; // Return the value!
+  } catch (error) {
+    console.error('Decryption error:', error);
+    throw error;
+  }
+};
 
   const handleSubmit = () => {
     if (currentStep === 'claim') {
@@ -258,7 +257,6 @@ export default function AgentDashboard() {
         <BalanceDashboard
           encryptedBalance={encryptedBalanceHandle}
           onRevealBalance={handleRevealBalance}
-          
         />
       ) : (
         <div className="max-w-2xl mx-auto p-8 mt-12">
