@@ -195,6 +195,11 @@ const handleRevealBalance = async (): Promise<string> => {
     const signer = await provider.getSigner();
     const userAddress = await signer.getAddress();
 
+    console.log('User address:', userAddress);
+
+    // Contract address
+    const PORTFOLIO_MANAGER_ADDRESS = '0xc5e5A9e484DD7B69E0235c94C4dE67388f20859c';
+
     // Get encrypted balance from contract
     const portfolioManager = new ethers.Contract(
       PORTFOLIO_MANAGER_ADDRESS,
@@ -203,59 +208,49 @@ const handleRevealBalance = async (): Promise<string> => {
     );
 
     console.log('Getting encrypted balance from contract...');
-    const encryptedBalance = await portfolioManager.getTotalBalance();
-    console.log('Encrypted balance handle:', encryptedBalance);
-    console.log('Type of encryptedBalance:', typeof encryptedBalance);
+    const encryptedBalanceHandle = await portfolioManager.getTotalBalance();
+    console.log('Encrypted balance handle:', encryptedBalanceHandle);
+    console.log('Handle toString:', encryptedBalanceHandle.toString());
 
     // Handle case where balance is not initialized or is zero
-    if (!encryptedBalance || encryptedBalance.toString() === "0") {
+    if (!encryptedBalanceHandle || encryptedBalanceHandle.toString() === "0") {
       console.log('Balance is zero or not initialized');
       return "0";
     }
 
-    // Generate keypair for reencryption
-    console.log('Generating keypair...');
-    const { publicKey, privateKey } = fheInstance.generateKeypair();
-
-    // Create EIP712 signature for the public key
-    console.log('Creating EIP712 signature...');
-    const eip712 = fheInstance.createEIP712(publicKey, PORTFOLIO_MANAGER_ADDRESS);
+    // The relayer SDK likely has a method like getUserDecryption or similar
+    // Check what methods are available on your fheInstance
+    console.log('Available methods on fheInstance:', Object.keys(fheInstance));
     
-    // Request user's signature on the public key
-    console.log('Requesting signature...');
-    const signature = await signer.signTypedData(
-      eip712.domain,
-      { Reencrypt: eip712.types.Reencrypt },
-      eip712.message
-    );
-
-    console.log('Signature obtained:', signature);
-
-    // Convert BigInt to number if necessary
-    let balanceHandle = encryptedBalance;
-    if (typeof encryptedBalance === 'bigint') {
-      balanceHandle = Number(encryptedBalance);
-    } else if (encryptedBalance._isBigNumber || encryptedBalance._hex) {
-      // Handle ethers BigNumber
-      balanceHandle = encryptedBalance.toNumber ? encryptedBalance.toNumber() : Number(encryptedBalance.toString());
+    // Try the most likely method names:
+    let decryptedValue;
+    
+    if (typeof fheInstance.getUserDecryption === 'function') {
+      decryptedValue = await fheInstance.getUserDecryption(
+        encryptedBalanceHandle,
+        PORTFOLIO_MANAGER_ADDRESS,
+        userAddress,
+        signer
+      );
+    } else if (typeof fheInstance.requestUserDecryption === 'function') {
+      decryptedValue = await fheInstance.requestUserDecryption(
+        encryptedBalanceHandle,
+        PORTFOLIO_MANAGER_ADDRESS,
+        signer
+      );
+    } else if (typeof fheInstance.decrypt === 'function') {
+      // Some SDKs have a simple decrypt method
+      decryptedValue = await fheInstance.decrypt(
+        encryptedBalanceHandle,
+        signer
+      );
+    } else {
+      throw new Error('No decryption method found on fheInstance. Available methods: ' + Object.keys(fheInstance).join(', '));
     }
 
-    console.log('Balance handle converted:', balanceHandle);
-
-    // Reencrypt and decrypt the balance
-    console.log('Reencrypting balance...');
-    const decryptedBalance = await fheInstance.reencrypt(
-      balanceHandle, // Use the converted handle
-      privateKey,
-      publicKey,
-      signature.replace("0x", ""), // Remove 0x prefix
-      PORTFOLIO_MANAGER_ADDRESS,
-      userAddress
-    );
-
-    console.log('Balance revealed:', decryptedBalance);
+    console.log('Balance revealed:', decryptedValue);
     
-    return decryptedBalance.toString();
+    return decryptedValue.toString();
   } catch (error: any) {
     console.error('Decryption error:', error);
     console.error('Error stack:', error.stack);
