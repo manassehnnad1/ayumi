@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard.tsx'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { PrivyProvider } from '@privy-io/react-auth';
 
+
 const myRouter = createBrowserRouter([
   {
     path: '/',

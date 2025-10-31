@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { useFHE } from '../context/FHEContext';
-// import { ArrowLeft } from 'lucide-react';
-// import BalanceDashboard from '@/components/BalanceDashboard';
+import BalanceDashboard from '@/components/BalanceDashboard';
 
 type Steps = 'claim' | 'deposit' | 'dashboard';
 
@@ -31,14 +30,15 @@ export default function AgentDashboard() {
   const [currentStep, setCurrentStep] = useState<Steps>('claim');
   const [amount, setAmount] = useState('1000');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [encryptedBalanceHandle, setEncryptedBalanceHandle] = useState<string>('');
+  const [revealedBalance, setRevealedBalance] = useState<string | null>(null);
 
   const handleLogout = async() => {
     await logout();
     navigate('/');
   };
 
-  
-const handleClaimTokens = async () => {
+  const handleClaimTokens = async () => {
     setIsProcessing(true);
     try {
       const wallet = wallets[0];
@@ -89,11 +89,9 @@ const handleClaimTokens = async () => {
     }
   };
 
-
   const handleDeposit = async () => {
     setIsProcessing(true);
     try {
-      // Check FHE is ready
       if (!isInitialized || !fheInstance) {
         alert('⏳ Encryption system initializing... Please wait a moment and try again.');
         return;
@@ -113,7 +111,6 @@ const handleClaimTokens = async () => {
 
       console.log(`Depositing ${amount} tokens...`);
 
-      // Step 1: Approve PortfolioManager to spend tokens
       const mockToken = new ethers.Contract(
         MOCK_TOKEN_ADDRESS,
         MOCK_TOKEN_ABI,
@@ -127,7 +124,6 @@ const handleClaimTokens = async () => {
       await approveTx.wait();
       console.log('Approval confirmed!');
 
-      // Step 2: Encrypt the amount
       console.log('Step 2: Encrypting amount...');
       const encryptedInput = fheInstance.createEncryptedInput(
         PORTFOLIO_MANAGER_ADDRESS,
@@ -142,7 +138,6 @@ const handleClaimTokens = async () => {
         proof: encrypted.inputProof.slice(0, 20) + '...'
       });
 
-      // Step 3: Call deposit with encrypted data
       console.log('Step 3: Sending deposit transaction...');
       const portfolioManager = new ethers.Contract(
         PORTFOLIO_MANAGER_ADDRESS,
@@ -165,8 +160,10 @@ const handleClaimTokens = async () => {
         `Encrypted: ${encrypted.handles[0].slice(0, 20)}...\n\n` +
         `Your balance is now encrypted on-chain!`
       );
-      
-      // TODO: Move to chat interface showing agent managing portfolio
+
+      // Store encrypted handle and move to dashboard
+      setEncryptedBalanceHandle(encrypted.handles[0]);
+      setCurrentStep('dashboard');
     } catch (error: any) {
       console.error('Error depositing tokens:', error);
       
@@ -180,38 +177,55 @@ const handleClaimTokens = async () => {
     }
   };
 
-const handleSubmit = () => {
+  const handleRevealBalance = async () => {
+    if (!fheInstance || !encryptedBalanceHandle) {
+      alert('Cannot decrypt - missing data');
+      return;
+    }
+
+    try {
+      // TODO: Implement actual decryption using relayer
+      // For now, just show the amount they deposited
+      setRevealedBalance(amount);
+      console.log('Balance revealed!');
+    } catch (error) {
+      console.error('Decryption error:', error);
+      throw error;
+    }
+  };
+
+  const handleSubmit = () => {
     if (currentStep === 'claim') {
       handleClaimTokens();
-    } else {
+    } else if (currentStep === 'deposit') {
       handleDeposit();
     }
   };
 
- if (ready && !authenticated) {
+  if (ready && !authenticated) {
     navigate('/');
     return null;
   }
 
   const walletAddress = user?.wallet?.address;
 
- const stepConfig: Record<Steps, { title: string; buttonText: string; helperText: string }> = {
-  claim: {
-    title: 'Claim test tokens',
-    buttonText: 'Claim',
-    helperText: 'Get free ayUSDC tokens to try out Ayumi. No real money needed!',
-  },
-  deposit: {
-    title: 'Deposit',
-    buttonText: 'Deposit',
-    helperText: 'Deposit tokens to start portfolio management with encrypted balances.',
-  },
-  dashboard: {
-    title: 'Dashboard',
-    buttonText: '',
-    helperText: '',
-  },
-};
+  const stepConfig: Record<Steps, { title: string; buttonText: string; helperText: string }> = {
+    claim: {
+      title: 'Claim test tokens',
+      buttonText: 'Claim',
+      helperText: 'Get free ayUSDC tokens to try out Ayumi. No real money needed!',
+    },
+    deposit: {
+      title: 'Deposit',
+      buttonText: 'Deposit',
+      helperText: 'Deposit tokens to start portfolio management with encrypted balances.',
+    },
+    dashboard: {
+      title: 'Dashboard',
+      buttonText: '',
+      helperText: '',
+    },
+  };
 
   const config = stepConfig[currentStep];
 
@@ -225,7 +239,7 @@ const handleSubmit = () => {
         </div>
         
         <div className="flex items-center gap-4">
-           {walletAddress && (
+          {walletAddress && (
             <span className="text-sm text-gray-600">
               {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
             </span>
@@ -240,66 +254,68 @@ const handleSubmit = () => {
       </header>
 
       {/* Main Content */}
-         <div className="max-w-2xl mx-auto p-8 mt-12">
-        {/* Dynamic Section - Claim or Deposit */}
-        <div className="space-y-6">
-          <h2 className="text-4xl font-semibold text-gray-900">
-            {config.title}
-          </h2>
+      {currentStep === 'dashboard' ? (
+        <BalanceDashboard
+          encryptedBalance={encryptedBalanceHandle}
+          onRevealBalance={handleRevealBalance}
+          
+        />
+      ) : (
+        <div className="max-w-2xl mx-auto p-8 mt-12">
+          <div className="space-y-6">
+            <h2 className="text-4xl font-semibold text-gray-900">
+              {config.title}
+            </h2>
 
-          <div className="space-y-4">
-            {/* Input with bottom border */}
-            <div className="relative">
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="Enter amount"
-                className="w-full text-xl py-3 px-0 bg-transparent border-0 border-b-2 border-gray-900 focus:outline-none focus:border-black placeholder:text-gray-400"
-                disabled={isProcessing}
-              />
-            </div>
-
-            {/* Action Button - Yellow + Next/Back controls */}
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleSubmit}
-                disabled={isProcessing || !amount || Number(amount) <= 0}
-                className="bg-yellow-400 hover:bg-yellow-500 disabled:bg-yellow-200 text-black font-medium text-xl px-8 py-3 rounded-lg transition-colors disabled:cursor-not-allowed cursor-pointer"
-              >
-                {isProcessing ? 'Processing...' : config.buttonText}
-              </button>
-
-              {/* Next button shown on claim step */}
-              {currentStep === 'claim' && (
-                <button
-                  onClick={() => setCurrentStep('deposit')}
+            <div className="space-y-4">
+              <div className="relative">
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  className="w-full text-xl py-3 px-0 bg-transparent border-0 border-b-2 border-gray-900 focus:outline-none focus:border-black placeholder:text-gray-400"
                   disabled={isProcessing}
-                  className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-lg font-medium transition-colors disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              )}
+                />
+              </div>
 
-              {/* Back button shown on deposit step */}
-              {currentStep === 'deposit' && (
+              <div className="flex items-center gap-4">
                 <button
-                  onClick={() => setCurrentStep('claim')}
-                  disabled={isProcessing}
-                  className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-lg font-medium transition-colors disabled:cursor-not-allowed"
+                  onClick={handleSubmit}
+                  disabled={isProcessing || !amount || Number(amount) <= 0}
+                  className="bg-yellow-400 hover:bg-yellow-500 disabled:bg-yellow-200 text-black font-medium text-xl px-8 py-3 rounded-lg transition-colors disabled:cursor-not-allowed cursor-pointer"
                 >
-                  Back
+                  {isProcessing ? 'Processing...' : config.buttonText}
                 </button>
-              )}
-            </div>
 
-            {/* Helper text */}
-            <p className="text-lg text-gray-500">
-              {config.helperText}
-            </p>
+                {currentStep === 'claim' && (
+                  <button
+                    onClick={() => setCurrentStep('deposit')}
+                    disabled={isProcessing}
+                    className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-lg font-medium transition-colors disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                )}
+
+                {currentStep === 'deposit' && (
+                  <button
+                    onClick={() => setCurrentStep('claim')}
+                    disabled={isProcessing}
+                    className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-lg font-medium transition-colors disabled:cursor-not-allowed"
+                  >
+                    Back
+                  </button>
+                )}
+              </div>
+
+              <p className="text-lg text-gray-500">
+                {config.helperText}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
