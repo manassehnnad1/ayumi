@@ -198,7 +198,7 @@ const handleRevealBalance = async (): Promise<string> => {
     console.log('User address:', userAddress);
 
     // Contract address
-    const PORTFOLIO_MANAGER_ADDRESS = '0xc5e5A9e484DD7B69E0235c94C4dE67388f20859c';
+    const PORTFOLIO_MANAGER_ADDRESS = '0xc5e5A9e484DD7B69E0235c94C4dE67388f20859c' as `0x${string}`;
 
     // Get encrypted balance from contract
     const portfolioManager = new ethers.Contract(
@@ -220,32 +220,25 @@ const handleRevealBalance = async (): Promise<string> => {
     // Generate keypair for user decryption
     console.log('Generating keypair...');
     const keypair = fheInstance.generateKeypair();
-    const publicKey = keypair.publicKey; // This is a string
-    const privateKey = keypair.privateKey; // This is also a string
+    const publicKey = keypair.publicKey;
+    const privateKey = keypair.privateKey;
     
-    console.log('Public key (string):', publicKey);
-    console.log('Private key type:', typeof privateKey);
+    console.log('Keypair generated');
 
     // Create EIP712 signature - pass array of contract addresses
     console.log('Creating EIP712 signature...');
-    const contractAddresses = [PORTFOLIO_MANAGER_ADDRESS];
+    const contractAddresses = [PORTFOLIO_MANAGER_ADDRESS] as `0x${string}`[];
     
-    console.log('Calling createEIP712 with:', {
-      publicKeyType: typeof publicKey,
-      addressesType: typeof contractAddresses,
-      addresses: contractAddresses
-    });
-
     const eip712Data = fheInstance.createEIP712(
       publicKey,
       contractAddresses
     );
 
-    console.log('EIP712 data created successfully');
+    console.log('EIP712 data:', eip712Data);
 
     // Request user's signature
     console.log('Requesting signature from user...');
-    const signature = await signer.signTypedData(
+    const signedData = await signer.signTypedData(
       eip712Data.domain,
       { Reencrypt: eip712Data.types.Reencrypt },
       eip712Data.message
@@ -253,23 +246,52 @@ const handleRevealBalance = async (): Promise<string> => {
 
     console.log('Signature obtained');
 
-    // Prepare decrypt requests array
+    // Prepare decrypt requests array - ensure proper typing
     const decryptRequests = [{
       handle: encryptedBalanceHandle.toString(),
-      contractAddress: PORTFOLIO_MANAGER_ADDRESS
+      contractAddress: PORTFOLIO_MANAGER_ADDRESS as `0x${string}`
     }];
 
-    // Get timestamp and duration from EIP712 message or use defaults
-    const startTimestamp = eip712Data.message?.timestamp || Math.floor(Date.now() / 1000);
-    const durationDays = 7;
+    console.log('Decrypt requests:', decryptRequests);
+
+    // Extract timestamp and duration from EIP712 message
+    const startTimestamp = eip712Data.message.timestamp;
+    const durationDays = eip712Data.message.durationInDays || 7;
+
+    console.log('Start timestamp:', startTimestamp);
+    console.log('Duration days:', durationDays);
+
+    // Ensure all parameters are defined before calling userDecrypt
+    if (!decryptRequests || !privateKey || !publicKey || !signedData || !contractAddresses || !userAddress || !startTimestamp) {
+      console.error('Missing parameters:', {
+        decryptRequests,
+        privateKey: !!privateKey,
+        publicKey: !!publicKey,
+        signedData: !!signedData,
+        contractAddresses,
+        userAddress,
+        startTimestamp
+      });
+      throw new Error('Missing required parameters for userDecrypt');
+    }
 
     // Call userDecrypt with all required parameters
-    console.log('Calling userDecrypt...');
+    console.log('Calling userDecrypt with params:', {
+      requestsLength: decryptRequests.length,
+      hasPrivateKey: !!privateKey,
+      hasPublicKey: !!publicKey,
+      hasSignature: !!signedData,
+      addressesLength: contractAddresses.length,
+      userAddress,
+      startTimestamp,
+      durationDays
+    });
+
     const decryptedResults = await fheInstance.userDecrypt(
       decryptRequests,
       privateKey,
       publicKey,
-      signature.replace('0x', ''),
+      signedData.replace('0x', ''),
       contractAddresses,
       userAddress,
       startTimestamp,
@@ -283,7 +305,7 @@ const handleRevealBalance = async (): Promise<string> => {
     const decryptedBalance = decryptedResults[balanceKey];
 
     if (decryptedBalance === undefined) {
-      console.error('Balance not found in results. Available keys:', Object.keys(decryptedResults));
+      console.error('Balance not found. Available keys:', Object.keys(decryptedResults));
       throw new Error('Decrypted balance not found in results');
     }
 
@@ -292,6 +314,8 @@ const handleRevealBalance = async (): Promise<string> => {
     return decryptedBalance.toString();
   } catch (error: any) {
     console.error('Decryption error:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
     throw new Error(`Failed to decrypt: ${error.message}`);
   }
