@@ -195,6 +195,8 @@ const handleRevealBalance = async (): Promise<string> => {
     const signer = await provider.getSigner();
     const userAddress = await signer.getAddress();
 
+    console.log('User address:', userAddress);
+
     // Contract address
     const PORTFOLIO_MANAGER_ADDRESS = '0xc5e5A9e484DD7B69E0235c94C4dE67388f20859c';
 
@@ -207,64 +209,90 @@ const handleRevealBalance = async (): Promise<string> => {
 
     console.log('Getting encrypted balance from contract...');
     const encryptedBalanceHandle = await portfolioManager.getTotalBalance();
-    
+    console.log('Encrypted balance handle:', encryptedBalanceHandle.toString());
+
+    // Handle case where balance is not initialized or is zero
     if (!encryptedBalanceHandle || encryptedBalanceHandle.toString() === "0") {
+      console.log('Balance is zero or not initialized');
       return "0";
     }
 
-    // Generate keypair
+    // Generate keypair for user decryption
+    console.log('Generating keypair...');
     const keypair = fheInstance.generateKeypair();
-    console.log('Keypair:', keypair);
+    const publicKey = keypair.publicKey; // This is a string
+    const privateKey = keypair.privateKey; // This is also a string
     
-    // The publicKey might be an object or Uint8Array, not a simple value
-    const publicKey = keypair.publicKey;
-    const privateKey = keypair.privateKey;
+    console.log('Public key (string):', publicKey);
+    console.log('Private key type:', typeof privateKey);
 
-    // Check if publicKey is Uint8Array and needs conversion
-    let publicKeyForEIP712 = publicKey;
-    if (publicKey instanceof Uint8Array) {
-      console.log('Public key is Uint8Array, length:', publicKey.length);
-      // Keep as is - the SDK should handle it
-    } else if (typeof publicKey === 'string') {
-      console.log('Public key is string:', publicKey);
-    } else {
-      console.log('Public key type:', typeof publicKey, publicKey);
+    // Create EIP712 signature - pass array of contract addresses
+    console.log('Creating EIP712 signature...');
+    const contractAddresses = [PORTFOLIO_MANAGER_ADDRESS];
+    
+    console.log('Calling createEIP712 with:', {
+      publicKeyType: typeof publicKey,
+      addressesType: typeof contractAddresses,
+      addresses: contractAddresses
+    });
+
+    const eip712Data = fheInstance.createEIP712(
+      publicKey,
+      contractAddresses
+    );
+
+    console.log('EIP712 data created successfully');
+
+    // Request user's signature
+    console.log('Requesting signature from user...');
+    const signature = await signer.signTypedData(
+      eip712Data.domain,
+      { Reencrypt: eip712Data.types.Reencrypt },
+      eip712Data.message
+    );
+
+    console.log('Signature obtained');
+
+    // Prepare decrypt requests array
+    const decryptRequests = [{
+      handle: encryptedBalanceHandle.toString(),
+      contractAddress: PORTFOLIO_MANAGER_ADDRESS
+    }];
+
+    // Get timestamp and duration from EIP712 message or use defaults
+    const startTimestamp = eip712Data.message?.timestamp || Math.floor(Date.now() / 1000);
+    const durationDays = 7;
+
+    // Call userDecrypt with all required parameters
+    console.log('Calling userDecrypt...');
+    const decryptedResults = await fheInstance.userDecrypt(
+      decryptRequests,
+      privateKey,
+      publicKey,
+      signature.replace('0x', ''),
+      contractAddresses,
+      userAddress,
+      startTimestamp,
+      durationDays
+    );
+
+    console.log('Decryption results:', decryptedResults);
+
+    // Extract the balance from results (keyed by handle)
+    const balanceKey = encryptedBalanceHandle.toString();
+    const decryptedBalance = decryptedResults[balanceKey];
+
+    if (decryptedBalance === undefined) {
+      console.error('Balance not found in results. Available keys:', Object.keys(decryptedResults));
+      throw new Error('Decrypted balance not found in results');
     }
 
-    // Try creating EIP712 with the contract address as an array (some SDKs expect this)
-    console.log('Creating EIP712...');
-    try {
-      const eip712Data = fheInstance.createEIP712(
-        publicKeyForEIP712,
-        PORTFOLIO_MANAGER_ADDRESS
-      );
-
-      const signature = await signer.signTypedData(
-        eip712Data.domain,
-        { Reencrypt: eip712Data.types.Reencrypt },
-        eip712Data.message
-      );
-
-      const decryptedValue = await fheInstance.userDecrypt(
-        encryptedBalanceHandle,
-        privateKey,
-        publicKey,
-        signature.replace('0x', ''),
-        PORTFOLIO_MANAGER_ADDRESS,
-        userAddress
-      );
-
-      return decryptedValue.toString();
-    } catch (eip712Error: any) {
-      console.error('EIP712 creation failed:', eip712Error);
-      console.error('This might be a version mismatch issue with @zama-fhe/relayer-sdk');
-      
-      // Log the exact versions
-      console.log('Please check your package.json for @zama-fhe/relayer-sdk version');
-      throw eip712Error;
-    }
+    console.log('Balance revealed:', decryptedBalance);
+    
+    return decryptedBalance.toString();
   } catch (error: any) {
     console.error('Decryption error:', error);
+    console.error('Error stack:', error.stack);
     throw new Error(`Failed to decrypt: ${error.message}`);
   }
 };
