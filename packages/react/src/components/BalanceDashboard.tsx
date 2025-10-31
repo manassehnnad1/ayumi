@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState } from 'react';
 import { Eye } from 'lucide-react';
+
 
 interface BalanceDashboardProps {
   encryptedBalance: string;

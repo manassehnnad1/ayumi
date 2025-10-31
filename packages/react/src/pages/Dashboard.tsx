@@ -19,6 +19,7 @@ const MOCK_TOKEN_ABI = [
 
 const PORTFOLIO_MANAGER_ABI = [
   "function deposit(bytes32 inputHandle, bytes inputProof) external",
+  "function getTotalBalance() external view returns (bytes32)",
 ];
 
 export default function AgentDashboard() {
@@ -177,19 +178,50 @@ export default function AgentDashboard() {
     }
   };
 
- const handleRevealBalance = async (): Promise<string> => {
+const handleRevealBalance = async (): Promise<string> => {
   if (!fheInstance || !encryptedBalanceHandle) {
     throw new Error('Cannot decrypt - missing data');
   }
 
   try {
-    // TODO: Implement actual decryption using relayer
-    // For now, just return the amount they deposited
-    console.log('Balance revealed:', amount);
-    return amount; // Return the value!
-  } catch (error) {
+    const wallet = wallets[0];
+    if (!wallet) {
+      throw new Error('No wallet connected');
+    }
+
+    await wallet.switchChain(11155111);
+    const ethereumProvider = await wallet.getEthereumProvider();
+    const provider = new ethers.BrowserProvider(ethereumProvider);
+    const signer = await provider.getSigner();
+
+    // Get encrypted balance from contract
+    const portfolioManager = new ethers.Contract(
+      PORTFOLIO_MANAGER_ADDRESS,
+      PORTFOLIO_MANAGER_ABI,
+      signer
+    );
+
+    console.log('Getting encrypted balance from contract...');
+    const encryptedBalance = await portfolioManager.getTotalBalance();
+    console.log('Encrypted balance handle:', encryptedBalance);
+
+    // Decrypt using relayer
+    console.log('Decrypting via relayer...');
+    const decryptedValues = await fheInstance.decrypt(
+      PORTFOLIO_MANAGER_ADDRESS,
+      encryptedBalance
+    );
+
+    console.log('Decryption result:', decryptedValues);
+    
+    // The result should be a number
+    const balanceValue = decryptedValues.toString();
+    console.log('Balance revealed:', balanceValue);
+    
+    return balanceValue;
+  } catch (error: any) {
     console.error('Decryption error:', error);
-    throw error;
+    throw new Error(`Failed to decrypt: ${error.message}`);
   }
 };
 
