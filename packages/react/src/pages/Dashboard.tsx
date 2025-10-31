@@ -179,8 +179,8 @@ export default function AgentDashboard() {
   };
 
 const handleRevealBalance = async (): Promise<string> => {
-  if (!fheInstance || !encryptedBalanceHandle) {
-    throw new Error('Cannot decrypt - missing data');
+  if (!fheInstance) {
+    throw new Error('Cannot decrypt - missing fheInstance');
   }
 
   try {
@@ -205,30 +205,47 @@ const handleRevealBalance = async (): Promise<string> => {
     console.log('Getting encrypted balance from contract...');
     const encryptedBalance = await portfolioManager.getTotalBalance();
     console.log('Encrypted balance handle:', encryptedBalance);
+    console.log('Type of encryptedBalance:', typeof encryptedBalance);
+
+    // Handle case where balance is not initialized or is zero
+    if (!encryptedBalance || encryptedBalance.toString() === "0") {
+      console.log('Balance is zero or not initialized');
+      return "0";
+    }
 
     // Generate keypair for reencryption
+    console.log('Generating keypair...');
     const { publicKey, privateKey } = fheInstance.generateKeypair();
 
     // Create EIP712 signature for the public key
+    console.log('Creating EIP712 signature...');
     const eip712 = fheInstance.createEIP712(publicKey, PORTFOLIO_MANAGER_ADDRESS);
     
     // Request user's signature on the public key
+    console.log('Requesting signature...');
     const signature = await signer.signTypedData(
       eip712.domain,
       { Reencrypt: eip712.types.Reencrypt },
       eip712.message
     );
 
-    // Handle case where balance is not initialized
-    if (encryptedBalance.toString() === "0") {
-      console.log('Balance is zero or not initialized');
-      return "0";
+    console.log('Signature obtained:', signature);
+
+    // Convert BigInt to number if necessary
+    let balanceHandle = encryptedBalance;
+    if (typeof encryptedBalance === 'bigint') {
+      balanceHandle = Number(encryptedBalance);
+    } else if (encryptedBalance._isBigNumber || encryptedBalance._hex) {
+      // Handle ethers BigNumber
+      balanceHandle = encryptedBalance.toNumber ? encryptedBalance.toNumber() : Number(encryptedBalance.toString());
     }
+
+    console.log('Balance handle converted:', balanceHandle);
 
     // Reencrypt and decrypt the balance
     console.log('Reencrypting balance...');
     const decryptedBalance = await fheInstance.reencrypt(
-      encryptedBalance,
+      balanceHandle, // Use the converted handle
       privateKey,
       publicKey,
       signature.replace("0x", ""), // Remove 0x prefix
@@ -241,6 +258,7 @@ const handleRevealBalance = async (): Promise<string> => {
     return decryptedBalance.toString();
   } catch (error: any) {
     console.error('Decryption error:', error);
+    console.error('Error stack:', error.stack);
     throw new Error(`Failed to decrypt: ${error.message}`);
   }
 };
