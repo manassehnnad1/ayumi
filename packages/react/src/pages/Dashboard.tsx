@@ -91,96 +91,99 @@ export default function AgentDashboard() {
   };
 
   const handleDeposit = async () => {
-    setIsProcessing(true);
-    try {
-      if (!isInitialized || !fheInstance) {
-        alert('⏳ Encryption system initializing... Please wait a moment and try again.');
-        return;
-      }
+  setIsProcessing(true);
+  try {
+    if (!isInitialized || !fheInstance) {
+      alert('⏳ Encryption system initializing... Please wait a moment and try again.');
+      return;
+    }
 
-      const wallet = wallets[0];
-      if (!wallet) {
-        alert('No wallet connected');
-        return;
-      }
+    const wallet = wallets[0];
+    if (!wallet) {
+      alert('No wallet connected');
+      return;
+    }
 
-      await wallet.switchChain(11155111);
-      const ethereumProvider = await wallet.getEthereumProvider();
-      const provider = new ethers.BrowserProvider(ethereumProvider);
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
+    await wallet.switchChain(11155111);
+    const ethereumProvider = await wallet.getEthereumProvider();
+    const provider = new ethers.BrowserProvider(ethereumProvider);
+    const signer = await provider.getSigner();
+    const userAddress = await signer.getAddress();
 
-      console.log(`Depositing ${amount} tokens...`);
+    console.log(`Depositing ${amount} tokens...`);
 
-      const mockToken = new ethers.Contract(
-        MOCK_TOKEN_ADDRESS,
-        MOCK_TOKEN_ABI,
-        signer
-      );
+    const mockToken = new ethers.Contract(
+      MOCK_TOKEN_ADDRESS,
+      MOCK_TOKEN_ABI,
+      signer
+    );
 
-      const amountInWei = ethers.parseUnits(amount, 18);
-      
-      console.log('Step 1: Approving tokens...');
-      const approveTx = await mockToken.approve(PORTFOLIO_MANAGER_ADDRESS, amountInWei);
-      await approveTx.wait();
-      console.log('Approval confirmed!');
+    // Convert to wei for ERC20 approval only
+    const amountInWei = ethers.parseUnits(amount, 18);
 
-      console.log('Step 2: Encrypting amount...');
-      const encryptedInput = fheInstance.createEncryptedInput(
-        PORTFOLIO_MANAGER_ADDRESS,
-        userAddress
-      );
-      
-      encryptedInput.add32(Number(amount));
-      const encrypted = await encryptedInput.encrypt();
-      
-      console.log('Encrypted data:', {
-        handle: encrypted.handles[0],
-        proof: encrypted.inputProof.slice(0, 20) + '...'
-      });
+    console.log('Step 1: Approving tokens...');
+    const approveTx = await mockToken.approve(PORTFOLIO_MANAGER_ADDRESS, amountInWei);
+    await approveTx.wait();
+    console.log('Approval confirmed!');
 
-      console.log('Step 3: Sending deposit transaction...');
-      const portfolioManager = new ethers.Contract(
-        PORTFOLIO_MANAGER_ADDRESS,
-        PORTFOLIO_MANAGER_ABI,
-        signer
-      );
+    console.log('Step 2: Encrypting amount (integer token count)...');
+    const encryptedInput = fheInstance.createEncryptedInput(
+      PORTFOLIO_MANAGER_ADDRESS,
+      userAddress
+    );
 
-      const depositTx = await portfolioManager.deposit(
-        encrypted.handles[0],
-        encrypted.inputProof
-      );
-      
-      console.log('Deposit transaction sent:', depositTx.hash);
-      await depositTx.wait();
-      console.log('Deposit confirmed!');
+    // Encrypt integer token count, not wei
+    encryptedInput.add32(Math.floor(Number(amount)));
+    const encrypted = await encryptedInput.encrypt();
 
-      alert(
-        `✅ Deposit successful!\n\n` +
+    console.log('Encrypted data:', {
+      handle: encrypted.handles[0],
+      proof: encrypted.inputProof.slice(0, 20) + '...',
+    });
+
+    console.log('Step 3: Sending deposit transaction...');
+    const portfolioManager = new ethers.Contract(
+      PORTFOLIO_MANAGER_ADDRESS,
+      PORTFOLIO_MANAGER_ABI,
+      signer
+    );
+
+    const depositTx = await portfolioManager.deposit(
+      encrypted.handles[0],
+      encrypted.inputProof
+    );
+
+    console.log('Deposit transaction sent:', depositTx.hash);
+    await depositTx.wait();
+    console.log('Deposit confirmed!');
+
+    alert(
+      `✅ Deposit successful!\n\n` +
         `Amount: ${amount} tokens\n` +
         `Encrypted: ${encrypted.handles[0].slice(0, 20)}...\n\n` +
         `Your balance is now encrypted on-chain!`
-      );
+    );
 
-      // Store encrypted handle and move to dashboard
-      setEncryptedBalanceHandle(encrypted.handles[0]);
-      setCurrentStep('dashboard');
-    } catch (error: any) {
-      console.error('Error depositing tokens:', error);
-      
-      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
-        alert('❌ Transaction cancelled');
-      } else {
-        alert(`❌ Failed to deposit:\n${error.message || 'Unknown error'}`);
-      }
-    } finally {
-      setIsProcessing(false);
+    // Store encrypted handle for future decryption
+    setEncryptedBalanceHandle(encrypted.handles[0]);
+    setCurrentStep('dashboard');
+  } catch (error: any) {
+    console.error('Error depositing tokens:', error);
+
+    if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+      alert('❌ Transaction cancelled');
+    } else {
+      alert(`❌ Failed to deposit:\n${error.message || 'Unknown error'}`);
     }
-  };
+  } finally {
+    setIsProcessing(false);
+  }
+};
+
 
 const handleRevealBalance = async (): Promise<string> => {
-  if (!fheInstance) {
-    throw new Error('Cannot decrypt - missing fheInstance');
+  if (!fheInstance || !encryptedBalanceHandle) {
+    throw new Error('Cannot decrypt - missing data');
   }
 
   try {
@@ -195,74 +198,66 @@ const handleRevealBalance = async (): Promise<string> => {
     const signer = await provider.getSigner();
     const userAddress = await signer.getAddress();
 
-    console.log('User address:', userAddress);
-
-    // Contract address
-    const PORTFOLIO_MANAGER_ADDRESS = '0xc5e5A9e484DD7B69E0235c94C4dE67388f20859c' as `0x${string}`;
-
-    // Get encrypted balance from contract
+    // Step 1: Retrieve ciphertext handle
+    console.log('Fetching encrypted balance from contract...');
     const portfolioManager = new ethers.Contract(
       PORTFOLIO_MANAGER_ADDRESS,
       PORTFOLIO_MANAGER_ABI,
       signer
     );
 
-   console.log("Retrieving encrypted balance handle...");
-const ciphertextHandle = await portfolioManager.getTotalBalance();
+    const encryptedBalance = await portfolioManager.getTotalBalance();
+    console.log('Encrypted balance handle:', encryptedBalance);
 
-// ✅ Step 2: Prepare relayer decryption parameters
-const keypair = fheInstance.generateKeypair();
+    // Step 2: Perform user decryption (client-side)
+    console.log('Performing user decryption...');
+    const keypair = fheInstance.generateKeypair();
+    const handleContractPairs = [
+      { handle: encryptedBalance, contractAddress: PORTFOLIO_MANAGER_ADDRESS },
+    ];
 
-const handleContractPairs = [
-  {
-    handle: ciphertextHandle,
-    contractAddress: PORTFOLIO_MANAGER_ADDRESS,
-  },
-];
+    const startTimeStamp = Math.floor(Date.now() / 1000).toString();
+    const durationDays = '10';
+    const contractAddresses = [PORTFOLIO_MANAGER_ADDRESS];
 
-const startTimeStamp = Math.floor(Date.now() / 1000).toString();
-const durationDays = "10";
-const contractAddresses = [PORTFOLIO_MANAGER_ADDRESS];
+    const eip712 = fheInstance.createEIP712(
+      keypair.publicKey,
+      contractAddresses,
+      startTimeStamp,
+      durationDays
+    );
 
-// ✅ Step 3: Create EIP-712 payload and signature
-const eip712 = fheInstance.createEIP712(
-  keypair.publicKey,
-  contractAddresses,
-  startTimeStamp,
-  durationDays
-);
+    const signature = await signer.signTypedData(
+      eip712.domain,
+      {
+        UserDecryptRequestVerification:
+          eip712.types.UserDecryptRequestVerification,
+      },
+      eip712.message
+    );
 
-const signature = await signer.signTypedData(
-  eip712.domain,
-  {
-    UserDecryptRequestVerification:
-      eip712.types.UserDecryptRequestVerification,
-  },
-  eip712.message
-);
+    const result = await fheInstance.userDecrypt(
+      handleContractPairs,
+      keypair.privateKey,
+      keypair.publicKey,
+      signature.replace('0x', ''),
+      contractAddresses,
+      userAddress,
+      startTimeStamp,
+      durationDays
+    );
 
-// ✅ Step 4: Perform user decryption through the relayer
-console.log("Requesting user decryption from relayer...");
-const result = await fheInstance.userDecrypt(
-  handleContractPairs,
-  keypair.privateKey,
-  keypair.publicKey,
-  signature.replace("0x", ""),
-  contractAddresses,
-  userAddress,
-  startTimeStamp,
-  durationDays
-);
+    const decryptedValue = result[encryptedBalance];
+    console.log('Decryption result (token count):', decryptedValue);
 
-const decryptedValue = result[ciphertextHandle];
-console.log("✅ Decrypted balance:", decryptedValue);
-
-return decryptedValue.toString();
-} catch (error: any) {
-console.error("Decryption error:", error);
-throw new Error(`Failed to decrypt: ${error.message}`);
-}
+    // Step 3: Return as string (token count)
+    return decryptedValue.toString();
+  } catch (error: any) {
+    console.error('Decryption error:', error);
+    throw new Error(`Failed to decrypt: ${error.message}`);
+  }
 };
+
 
 const handleSubmit = () => {
   if (currentStep === 'claim') {
