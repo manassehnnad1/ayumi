@@ -129,9 +129,8 @@ const handleConnectWallet = async () => {
        <div className="bg-black w-full mt-10 py-32">
         <div className="flex  mt-5   text-white gap-8  justify-center">
            <Link to='https://github.com/manassehnnad1/ayumi'><p className="text-2xl cursor-pointer hover:text-gray-200">GitHub <MoveUpRight className="inline-block h-4  mb-2 hover:text-gray-200" /></p></Link> 
-            <Link to='https://medium.com/@islathebuilder'><p className="text-2xl cursor-pointer hover:text-gray-200">Docs<MoveUpRight className="inline-block mb-2 h-4" /></p></Link>
+            <Link to='https://github.com/manassehnnad1/ayumi/README.md'><p className="text-2xl cursor-pointer hover:text-gray-200">Docs<MoveUpRight className="inline-block mb-2 h-4" /></p></Link>
             <Link to='https://x.com/islathebuilder'><p className="text-2xl cursor-pointer hover:text-gray-200">X<MoveUpRight className="inline-block mb-2 h-4" /></p></Link>
-            <Link to='https://'><p className="text-2xl cursor-pointer hover:text-gray-200">Demo<MoveUpRight className="inline-block mb-2 h-4" /></p></Link>
         </div>
         <p className="text-gray-200 mt-16 text-xl">Copyright © ayumi-zama 2025</p>
        </div>
