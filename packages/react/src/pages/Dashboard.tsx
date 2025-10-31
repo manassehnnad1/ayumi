@@ -197,8 +197,9 @@ const handleRevealBalance = async (): Promise<string> => {
 
     console.log('User address:', userAddress);
 
-    // Contract address
-    const PORTFOLIO_MANAGER_ADDRESS = '0xc5e5A9e484DD7B69E0235c94C4dE67388f20859c';
+    // Contract address - ensure it's a plain string with checksum
+    const PORTFOLIO_MANAGER_ADDRESS = ethers.getAddress('0xc5e5A9e484DD7B69E0235c94C4dE67388f20859c');
+    console.log('Contract address (checksummed):', PORTFOLIO_MANAGER_ADDRESS);
 
     // Get encrypted balance from contract
     const portfolioManager = new ethers.Contract(
@@ -210,6 +211,7 @@ const handleRevealBalance = async (): Promise<string> => {
     console.log('Getting encrypted balance from contract...');
     const encryptedBalanceHandle = await portfolioManager.getTotalBalance();
     console.log('Encrypted balance handle:', encryptedBalanceHandle.toString());
+    console.log('Handle type:', typeof encryptedBalanceHandle);
 
     // Handle case where balance is not initialized or is zero
     if (!encryptedBalanceHandle || encryptedBalanceHandle.toString() === "0") {
@@ -220,13 +222,25 @@ const handleRevealBalance = async (): Promise<string> => {
     // Generate keypair for user decryption
     console.log('Generating keypair...');
     const { publicKey, privateKey } = fheInstance.generateKeypair();
+    console.log('Keypair generated successfully');
+    console.log('Public key type:', typeof publicKey);
+    console.log('Public key value:', publicKey);
 
-    // Create EIP712 signature
+    // Create EIP712 signature - try with just the address string
     console.log('Creating EIP712 signature...');
+    console.log('About to call createEIP712 with:', {
+      publicKey: publicKey,
+      contractAddress: PORTFOLIO_MANAGER_ADDRESS,
+      publicKeyType: typeof publicKey,
+      addressType: typeof PORTFOLIO_MANAGER_ADDRESS
+    });
+
     const eip712Data = fheInstance.createEIP712(
       publicKey,
       PORTFOLIO_MANAGER_ADDRESS
     );
+
+    console.log('EIP712 data created successfully');
 
     // Request user's signature
     console.log('Requesting signature from user...');
@@ -236,9 +250,10 @@ const handleRevealBalance = async (): Promise<string> => {
       eip712Data.message
     );
 
-    console.log('Signature obtained, calling userDecrypt...');
+    console.log('Signature obtained');
 
     // Use userDecrypt method from relayer SDK
+    console.log('Calling userDecrypt...');
     const decryptedValue = await fheInstance.userDecrypt(
       encryptedBalanceHandle,
       privateKey,
@@ -253,6 +268,7 @@ const handleRevealBalance = async (): Promise<string> => {
     return decryptedValue.toString();
   } catch (error: any) {
     console.error('Decryption error:', error);
+    console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
     throw new Error(`Failed to decrypt: ${error.message}`);
   }
