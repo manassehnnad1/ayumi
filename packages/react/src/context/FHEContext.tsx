@@ -31,7 +31,7 @@ export function FHEProvider({ children }: { children: ReactNode }) {
           verifyingContractAddressInputVerification: '0x7048C39f048125eDa9d678AEbaDfB22F7900a29F',
           chainId: 11155111,
           gatewayChainId: 55815,
-          network: 'https://rpc.ankr.com/eth_sepolia',
+          network: 'https://rpc.ankr.com/eth_sepolia/be97f334d4ba4eaa0bc880b935def868b2686977905437eda9a7c5c240c5809f',
           relayerUrl: 'https://relayer.testnet.zama.cloud',
         });
         
